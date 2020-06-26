@@ -373,13 +373,15 @@ class ODPresentation implements ReaderInterface
         foreach ($this->oXMLReader->getElements('draw:frame', $nodeSlide) as $oNodeFrame) {
             if ($this->oXMLReader->getElement('draw:image', $oNodeFrame)) {
                 $this->loadShapeDrawing($oNodeFrame);
-                continue;
-            }
-            if ($this->oXMLReader->getElement('draw:text-box', $oNodeFrame)) {
+            } else if ($this->oXMLReader->getElement('draw:text-box', $oNodeFrame)) {
                 $this->loadShapeRichText($oNodeFrame);
-                continue;
             }
         }
+
+        $noteNode = $this->oXMLReader->getElement('presentation:notes', $nodeSlide);
+        $noteFrame = $this->oXMLReader->getElement('draw:frame', $noteNode);
+        $this->loadNoteText($noteFrame);
+
         return true;
     }
 
@@ -462,6 +464,40 @@ class ODPresentation implements ReaderInterface
         }
     }
     
+    /**
+     * Read Shape RichText of Note and add it to slide.
+     *
+     * @param \DOMElement $oNodeFrame
+     */
+    protected function loadNoteText(\DOMElement $oNodeFrame)
+    {
+        // Core
+        $note = $this->oPhpPresentation->getActiveSlide()->getNote();
+        $oShape = $note->createRichTextShape();
+        $oShape->setParagraphs(array());
+
+        $oShape->setWidth($oNodeFrame->hasAttribute('svg:width') ? (int)round(CommonDrawing::centimetersToPixels(substr($oNodeFrame->getAttribute('svg:width'), 0, -2))) : '');
+        $oShape->setHeight($oNodeFrame->hasAttribute('svg:height') ? (int)round(CommonDrawing::centimetersToPixels(substr($oNodeFrame->getAttribute('svg:height'), 0, -2))) : '');
+        $oShape->setOffsetX($oNodeFrame->hasAttribute('svg:x') ? (int)round(CommonDrawing::centimetersToPixels(substr($oNodeFrame->getAttribute('svg:x'), 0, -2))) : '');
+        $oShape->setOffsetY($oNodeFrame->hasAttribute('svg:y') ? (int)round(CommonDrawing::centimetersToPixels(substr($oNodeFrame->getAttribute('svg:y'), 0, -2))) : '');
+
+        foreach ($this->oXMLReader->getElements('draw:text-box/*', $oNodeFrame) as $oNodeParagraph) {
+            $this->levelParagraph = 0;
+            if ($oNodeParagraph->nodeName == 'text:p') {
+                $this->readParagraph($oShape, $oNodeParagraph);
+            }
+            if ($oNodeParagraph->nodeName == 'text:list') {
+                $this->readList($oShape, $oNodeParagraph);
+            }
+        }
+
+        if (count($oShape->getParagraphs()) > 0) {
+            $oShape->setActiveParagraph(0);
+        }
+
+        $this->oPhpPresentation->getActiveSlide()->setNote($note);
+    }
+
     protected $levelParagraph = 0;
 
     /**
